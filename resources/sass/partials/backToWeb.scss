@@ -1,0 +1,30 @@
+.back-to-web {
+    a {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 10px 20px;
+        background: linear-gradient(45deg, rgba(0, 40, 115, 0.974) -70%, rgb(84, 145, 243));
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        font-size: 16px;
+        box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
+        transition: transform 0.3s ease, background-color 0.3s ease;
+        font-family: Arial, Helvetica, sans-serif;
+        font-weight: 700;
+        z-index: 9999999;
+
+        &:hover {
+            transform: scale(1.05);
+        }
+    }
+}
+
+@media (max-width: 768px) {
+    .back-to-web {
+        a {
+            font-size: 10px;
+        }
+    }
+}

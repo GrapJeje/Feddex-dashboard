@@ -1,0 +1,48 @@
+.scroll-to-top {
+    position: fixed;
+    bottom: 2rem;
+    left: 2rem;
+    width: 50px;
+    height: 50px;
+    background-color: rgb(53, 53, 53);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    opacity: 0;
+    visibility: hidden;
+    z-index: 1000;
+
+    p {
+        font-size: 1.5rem;
+        font-family: "Roboto Slab", serif;
+    }
+
+    &:hover {
+        background-color: white;
+        color: rgb(53, 53, 53);
+        transform: scale(1.1);
+    }
+}
+
+.scroll-to-top.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+@media (max-width: 768px) {
+    .scroll-to-top {
+        bottom: 1rem;
+        left: 1rem;
+        width: 40px;
+        height: 40px;
+
+        p {
+            font-size: 1.2rem;
+        }
+    }
+}

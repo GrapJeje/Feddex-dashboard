@@ -1,1 +1,17 @@
 @import "fonts";
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: Segoe UI, Arial, sans-serif;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100vw;
+}
+
+
