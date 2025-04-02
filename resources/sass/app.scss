@@ -1,3 +1,4 @@
+@import "delivery";
 @import "themes";
 
 * {
@@ -11,4 +12,6 @@
     display: flex;
     flex-direction: column;
     flex: 1;
+    background-color: var(--input-bg);
+    color: var(--text-color);
 }
