@@ -145,7 +145,6 @@ class Delivery
 
     public function getItems(): array
     {
-        dd($this->items);
         return $this->items;
     }
 }
