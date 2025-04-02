@@ -2,7 +2,7 @@
     <div class="packages-grid">
         @php
             $defaultAmount = 5;
-            $currentAmount = min($_GET['amount'] ?? $defaultAmount, count($items));
+            $currentAmount = min(request('amount', $defaultAmount), count($items));
             $showMore = $currentAmount < count($items);
             $showLess = $currentAmount > $defaultAmount;
         @endphp
@@ -10,10 +10,9 @@
         @foreach(array_slice($items, 0, $currentAmount) as $item)
             <div class="package-card">
                 <div class="card-header">
-                    <h3>Pakketdetails #{{ $item->track_trace }}</h3>
-                    <span class="priority-badge {{ strtolower($item->priority) }}">{{ $item->priority }} Priority</span>
+                    <h3>Pakketdetails #{{ $item->tracking_code ?? 'Geen tracking code' }}</h3>
+                    <span class="priority-badge {{ strtolower($item->priority) }}">{{ $item->priority }}</span>
                 </div>
-
                 <div class="card-body">
                     <div class="package-info">
                         <div class="info-row">
@@ -22,14 +21,16 @@
                         </div>
                         <div class="info-row">
                             <span class="label">Formaat:</span>
-                            <span class="value">{{ $item->format }} ({{ $item->dimensions }} cm)</span>
+                            <span class="value">{{ $item->format }} ({{ $item->dimensions }})</span>
                         </div>
                         <div class="info-row">
                             <span class="label">Status:</span>
-                            <span
-                                class="value status-{{ strtolower(str_replace(' ', '-', $item->track_trace_status)) }}">
-                    {{ $item->track_trace_status }} ({{ $item->days_in_transit }} dagen onderweg)
-                </span>
+                            <span class="value status-{{ strtolower(str_replace(' ', '-', $item->tracking_status)) }}">
+                                {{ $item->tracking_status }}
+                                @if($item->days_in_transit > 0)
+                                    ({{ $item->days_in_transit }} dagen onderweg)
+                                @endif
+                            </span>
                         </div>
                         <div class="info-row">
                             <span class="label">Bezorging:</span>
@@ -68,7 +69,11 @@
                         </div>
                         <div class="info-row">
                             <span class="label">Chauffeur:</span>
-                            <span class="value">{{ $item->driver }} (Bus #{{ $item->delivery_van_id }})</span>
+                            <span class="value">{{ $item->driver ?? 'Onbekend' }}
+                                @if($item->delivery_van_id)
+                                    (Bus #{{ $item->delivery_van_id }})
+                                @endif
+                            </span>
                         </div>
                     </div>
                 </div>

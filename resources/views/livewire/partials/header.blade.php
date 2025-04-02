@@ -2,14 +2,12 @@
     @vite(['resources/sass/partials/header.scss', 'resources/js/header.js'])
 
     <div class="header-container">
-        <!-- Logo -->
         <div class="logo-container">
             <a href="/" aria-label="Feddex Home">
                 <img src="{{ asset('img/FeddEx.png') }}" alt="Feddex Logo" class="logo" width="120" height="40">
             </a>
         </div>
 
-        <!-- Filter & Search Controls -->
         <div class="controls-container">
             <button class="controls-toggle" id="controlsToggle" aria-expanded="false">
                 <svg class="filter-icon" viewBox="0 0 20 20" width="20" height="20">
@@ -77,18 +75,17 @@
             </div>
         </div>
 
-        <!-- Dark Mode Toggle -->
         <div class="theme-toggle-container">
             <label class="theme-toggle-label" aria-label="Toggle dark mode">
                 <input type="checkbox" id="darkModeToggle" class="theme-toggle-checkbox">
                 <span class="theme-toggle-slider">
-            <!-- Sun shows in light mode (left side) -->
             <svg class="slider-icon sun" viewBox="0 0 24 24">
-                <path d="M12 18a6 6 0 110-12 6 6 0 010 12zm0-2a4 4 0 100-8 4 4 0 000 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM1 11h3v2H1v-2zm19 0h3v2h-3v-2z"/>
+                <path
+                    d="M12 18a6 6 0 110-12 6 6 0 010 12zm0-2a4 4 0 100-8 4 4 0 000 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM1 11h3v2H1v-2zm19 0h3v2h-3v-2z"/>
             </svg>
-                    <!-- Moon shows in dark mode (right side) -->
             <svg class="slider-icon moon" viewBox="0 0 24 24">
-                <path d="M10 7a7 7 0 0012 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.98 6.98 0 0010 7zm-6 5a8 8 0 0015.062 3.762A9 9 0 018.238 4.938 7.999 7.999 0 004 12z"/>
+                <path
+                    d="M10 7a7 7 0 0012 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.98 6.98 0 0010 7zm-6 5a8 8 0 0015.062 3.762A9 9 0 018.238 4.938 7.999 7.999 0 004 12z"/>
             </svg>
             <span class="slider-knob"></span>
         </span>

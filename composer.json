@@ -14,7 +14,8 @@
         "laravel/tinker": "^2.10.1",
         "livewire/livewire": "*",
         "nette/utils": "^4.0",
-        "ext-simplexml": "*"
+        "ext-simplexml": "*",
+        "ext-libxml": "*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
