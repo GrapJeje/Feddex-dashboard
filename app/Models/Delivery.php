@@ -103,37 +103,39 @@ class Delivery
     {
         $item = new stdClass();
 
-        // Vereiste velden met fallback waarden
         $item->id = isset($delivery->id) ? (string)$delivery->id : '0';
         $item->weight = isset($delivery->gewicht) ? max(0, (float)$delivery->gewicht) : 0.0;
         $item->format = isset($delivery->formaat) ? (string)$delivery->formaat : 'Onbekend';
         $item->dimensions = isset($delivery->afmetingen) ? (string)$delivery->afmetingen : '0x0x0';
+        $item->priority = 'low';
 
-        // Adresgegevens met validatie
         $item->sender = $this->extractAddress($delivery->afzender ?? new SimpleXMLElement('<empty/>'));
         $item->receiver = $this->extractAddress($delivery->ontvanger ?? new SimpleXMLElement('<empty/>'));
 
-        $item->priority = 'low';
+        $item->tracking_code = '';
+        $item->tracking_status = 'unknown';
+
         $optionalFields = [
-            'binnenland' => 'domestic',
-            'bezorgdag' => 'delivery_day',
-            'bezorgtijd' => 'delivery_time',
-            'dagen_onderweg' => 'days_in_transit',
-            'prioriteit' => 'priority',
-            'fragile' => 'fragile',
-            'track_trace' => 'tracking_code',
-            'track_trace_status' => 'tracking_status',
-            'chauffeur' => 'driver',
-            'bezorgbus_id' => 'delivery_van_id',
-            'aanmeld_datum' => 'registration_date',
-            'verzend_datum' => 'shipping_date',
-            'ontvangst_datum' => 'receipt_date',
-            'thuis' => 'home',
-            'vermist_datum' => 'missing_date',
-            'aantal_dagen_vermist' => 'days_missing'
+            'binnenland' => ['domestic', false],
+            'bezorgdag' => ['delivery_day', ''],
+            'bezorgtijd' => ['delivery_time', ''],
+            'dagen_onderweg' => ['days_in_transit', 0],
+            'prioriteit' => ['priority', 'low'],
+            'fragile' => ['fragile', false],
+            'track_trace' => ['tracking_code', ''],
+            'track_trace_status' => ['tracking_status', 'unknown'],
+            'chauffeur' => ['driver', ''],
+            'bezorgbus_id' => ['delivery_van_id', 0],
+            'aanmeld_datum' => ['registration_date', ''],
+            'verzend_datum' => ['shipping_date', ''],
+            'ontvangst_datum' => ['receipt_date', ''],
+            'thuis' => ['home', ''],
+            'vermist_datum' => ['missing_date', ''],
+            'aantal_dagen_vermist' => ['days_missing', 0]
         ];
 
-        foreach ($optionalFields as $xmlField => $objectField) {
+        foreach ($optionalFields as $xmlField => [$objectField, $defaultValue]) {
+            $item->{$objectField} = $defaultValue;
             if (isset($delivery->{$xmlField})) {
                 $value = (string)$delivery->{$xmlField};
                 if ($xmlField === 'binnenland' || $xmlField === 'fragile') {
@@ -143,18 +145,20 @@ class Delivery
             }
         }
 
+        $item->priority = strtolower($item->priority);
+
         return $item;
     }
 
     private function extractAddress(SimpleXMLElement $address): stdClass
     {
         $addr = new stdClass();
-        $addr->country = (string)$address->land;
-        $addr->province = (string)$address->provincie;
-        $addr->city = (string)$address->stad;
-        $addr->street = (string)$address->straat;
-        $addr->house_number = (string)$address->huisnummer;
-        $addr->postal_code = (string)$address->postcode;
+        $addr->country = (string)($address->land ?? '');
+        $addr->province = (string)($address->provincie ?? '');
+        $addr->city = (string)($address->stad ?? '');
+        $addr->street = (string)($address->straat ?? '');
+        $addr->house_number = (string)($address->huisnummer ?? '');
+        $addr->postal_code = (string)($address->postcode ?? '');
 
         return $addr;
     }
@@ -228,77 +232,48 @@ class Delivery
 
     private function parseItem(object $item): stdClass
     {
-        $fieldMappings = [
-            'id' => 'id',
-            'gewicht' => 'weight',
-            'formaat' => 'format',
-            'afmetingen' => 'dimensions',
-            'afzender' => 'sender',
-            'ontvanger' => 'receiver',
-            'binnenland' => 'domestic',
-            'bezorgdag' => 'delivery_day',
-            'bezorgtijd' => 'delivery_time',
-            'dagen_onderweg' => 'days_in_transit',
-            'prioriteit' => 'priority',
-            'fragile' => 'fragile',
-            'track_trace' => 'tracking_code',
-            'track_trace_status' => 'tracking_status',
-            'chauffeur' => 'driver',
-            'bezorgbus_id' => 'delivery_van_id',
-            'aanmeld_datum' => 'registration_date',
-            'verzend_datum' => 'shipping_date',
-            'ontvangst_datum' => 'receipt_date',
-            'thuis' => 'home',
-            'vermist_datum' => 'missing_date',
-            'aantal_dagen_vermist' => 'days_missing'
-        ];
-
         $parsed = new stdClass();
         $parsed->uuid = $this->generateUuid();
 
         $requiredFields = [
-            'id' => ['default' => 0, 'type' => 'int'],
-            'gewicht' => ['default' => 0.0, 'type' => 'float'],
-            'formaat' => ['default' => 'Onbekend', 'type' => 'string'],
-            'afmetingen' => ['default' => '0x0x0', 'type' => 'string']
+            'id' => ['property' => 'id', 'default' => 0, 'type' => 'int'],
+            'gewicht' => ['property' => 'weight', 'default' => 0.0, 'type' => 'float'],
+            'formaat' => ['property' => 'format', 'default' => 'Onbekend', 'type' => 'string'],
+            'afmetingen' => ['property' => 'dimensions', 'default' => '0x0x0', 'type' => 'string']
         ];
 
         foreach ($requiredFields as $field => $config) {
-            $englishField = $fieldMappings[$field] ?? $field;
             $value = $item->{$field} ?? $config['default'];
             settype($value, $config['type']);
-            $parsed->{$englishField} = $value;
+            $parsed->{$config['property']} = $value;
         }
 
         $parsed->sender = $this->parseAddress($item->afzender ?? null);
         $parsed->receiver = $this->parseAddress($item->ontvanger ?? null);
 
         $optionalFields = [
-            'binnenland' => 'bool',
-            'bezorgdag' => 'string',
-            'bezorgtijd' => 'string',
-            'dagen_onderweg' => 'int',
-            'prioriteit' => 'string',
-            'fragile' => 'bool',
-            'track_trace' => 'string',
-            'track_trace_status' => 'string',
-            'chauffeur' => 'string',
-            'bezorgbus_id' => 'int',
-            'aanmeld_datum' => 'string',
-            'verzend_datum' => 'string',
-            'ontvangst_datum' => 'string',
-            'thuis' => 'string',
-            'vermist_datum' => 'string',
-            'aantal_dagen_vermist' => 'int'
+            'binnenland' => ['property' => 'domestic', 'default' => false, 'type' => 'bool'],
+            'bezorgdag' => ['property' => 'delivery_day', 'default' => '', 'type' => 'string'],
+            'bezorgtijd' => ['property' => 'delivery_time', 'default' => '', 'type' => 'string'],
+            'dagen_onderweg' => ['property' => 'days_in_transit', 'default' => 0, 'type' => 'int'],
+            'prioriteit' => ['property' => 'priority', 'default' => 'low', 'type' => 'string'],
+            'fragile' => ['property' => 'fragile', 'default' => false, 'type' => 'bool'],
+            'track_trace' => ['property' => 'tracking_code', 'default' => '', 'type' => 'string'],
+            'track_trace_status' => ['property' => 'tracking_status', 'default' => 'unknown', 'type' => 'string'],
+            'chauffeur' => ['property' => 'driver', 'default' => '', 'type' => 'string'],
+            'bezorgbus_id' => ['property' => 'delivery_van_id', 'default' => 0, 'type' => 'int'],
+            'aanmeld_datum' => ['property' => 'registration_date', 'default' => '', 'type' => 'string'],
+            'verzend_datum' => ['property' => 'shipping_date', 'default' => '', 'type' => 'string'],
+            'ontvangst_datum' => ['property' => 'receipt_date', 'default' => '', 'type' => 'string'],
+            'thuis' => ['property' => 'home', 'default' => '', 'type' => 'string'],
+            'vermist_datum' => ['property' => 'missing_date', 'default' => '', 'type' => 'string'],
+            'aantal_dagen_vermist' => ['property' => 'days_missing', 'default' => 0, 'type' => 'int']
         ];
 
-        foreach ($optionalFields as $field => $type) {
-            if (isset($item->{$field})) {
-                $englishField = $fieldMappings[$field] ?? $field;
-                $value = $item->{$field};
-                settype($value, $type);
-                $parsed->{$englishField} = $value;
-            }
+        foreach ($optionalFields as $field => $config) {
+            $value = $item->{$field} ?? $config['default'];
+            settype($value, $config['type']);
+            $parsed->{$config['property']} = $value;
         }
 
         return $parsed;
