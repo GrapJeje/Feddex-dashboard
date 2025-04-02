@@ -4,21 +4,27 @@ namespace App\Livewire;
 
 use Illuminate\View\View;
 use Livewire\Component;
+use App\Models\Delivery as DeliveryModel;
 
 class Delivery extends Component
 {
     public $items;
 
-    public function __construct()
+    public function mount(): void
     {
-        $delivery = new \App\Models\Delivery();
+        $this->loadItems();
+    }
+
+    public function loadItems(): void
+    {
+        $delivery = new DeliveryModel();
         $this->items = $delivery->getItems();
     }
 
-    public function render() : View
+    public function render(): View
     {
         return view('livewire.delivery', [
-            'item' => $this->items
+            'items' => $this->items
         ]);
     }
 }

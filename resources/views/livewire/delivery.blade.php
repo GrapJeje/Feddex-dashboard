@@ -89,6 +89,9 @@
             @if($showLess)
                 <button class="load-btn less" onclick="loadPackages(-5)">Minder laden (-5)</button>
             @endif
+            <p>@php
+                echo $currentAmount . "/" . count($items)
+                @endphp</p>
         </div>
     @endif
 

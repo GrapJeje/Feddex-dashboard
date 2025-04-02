@@ -103,16 +103,17 @@ class Delivery
     {
         $item = new stdClass();
 
-        $item->id = (string)$delivery->id;
-        $item->weight = (string)$delivery->gewicht;
-        $item->format = (string)$delivery->formaat;
-        $item->dimensions = (string)$delivery->afmetingen;
+        // Vereiste velden met fallback waarden
+        $item->id = isset($delivery->id) ? (string)$delivery->id : '0';
+        $item->weight = isset($delivery->gewicht) ? max(0, (float)$delivery->gewicht) : 0.0;
+        $item->format = isset($delivery->formaat) ? (string)$delivery->formaat : 'Onbekend';
+        $item->dimensions = isset($delivery->afmetingen) ? (string)$delivery->afmetingen : '0x0x0';
 
-        $item->sender = $this->extractAddress($delivery->afzender);
-        $item->receiver = $this->extractAddress($delivery->ontvanger);
+        // Adresgegevens met validatie
+        $item->sender = $this->extractAddress($delivery->afzender ?? new SimpleXMLElement('<empty/>'));
+        $item->receiver = $this->extractAddress($delivery->ontvanger ?? new SimpleXMLElement('<empty/>'));
 
         $item->priority = 'low';
-
         $optionalFields = [
             'binnenland' => 'domestic',
             'bezorgdag' => 'delivery_day',
@@ -140,10 +141,6 @@ class Delivery
                 }
                 $item->{$objectField} = $value;
             }
-        }
-
-        if (isset($item->priority)) {
-            $item->priority = strtolower($item->priority);
         }
 
         return $item;
@@ -259,19 +256,19 @@ class Delivery
         $parsed = new stdClass();
         $parsed->uuid = $this->generateUuid();
 
-        $requiredFields = ['id', 'gewicht', 'formaat', 'afmetingen'];
-        foreach ($requiredFields as $field) {
-            if (!isset($item->{$field})) {
-                throw new InvalidArgumentException("Missing required field: $field");
-            }
-            $englishField = $fieldMappings[$field] ?? $field;
-            $parsed->{$englishField} = $item->{$field};
-        }
+        $requiredFields = [
+            'id' => ['default' => 0, 'type' => 'int'],
+            'gewicht' => ['default' => 0.0, 'type' => 'float'],
+            'formaat' => ['default' => 'Onbekend', 'type' => 'string'],
+            'afmetingen' => ['default' => '0x0x0', 'type' => 'string']
+        ];
 
-        $parsed->id = (int)$parsed->id;
-        $parsed->weight = (float)$parsed->weight;
-        $parsed->format = (string)$parsed->format;
-        $parsed->dimensions = (string)$parsed->dimensions;
+        foreach ($requiredFields as $field => $config) {
+            $englishField = $fieldMappings[$field] ?? $field;
+            $value = $item->{$field} ?? $config['default'];
+            settype($value, $config['type']);
+            $parsed->{$englishField} = $value;
+        }
 
         $parsed->sender = $this->parseAddress($item->afzender ?? null);
         $parsed->receiver = $this->parseAddress($item->ontvanger ?? null);
@@ -338,5 +335,65 @@ class Delivery
     {
         $this->loadStats[$type]['errors'][] = $message;
         error_log("[Delivery Error] $message");
+    }
+
+    public function getFilteredAndSortedItems(array $filters = [], string $sort = ''): array
+    {
+        $filteredItems = $this->items;
+
+        if (!empty($filters)) {
+            $filteredItems = array_filter($filteredItems, function ($item) use ($filters) {
+                foreach ($filters as $key => $value) {
+                    if ($key === 'destination') {
+                        if ($value === 'domestic' && (!isset($item->domestic) || !$item->domestic)) {
+                            return false;
+                        }
+                        if ($value === 'international' && (!isset($item->domestic) || $item->domestic)) {
+                            return false;
+                        }
+                    } elseif ($key === 'delivery_day') {
+                        if (!isset($item->delivery_day) || strtolower($item->delivery_day) !== strtolower($value)) {
+                            return false;
+                        }
+                    } elseif ($key === 'delivery_time') {
+                        if (!isset($item->delivery_time) || strtolower($item->delivery_time) !== strtolower($value)) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            });
+        }
+
+        if (!empty($sort)) {
+            usort($filteredItems, function ($a, $b) use ($sort) {
+                [$field, $direction] = explode('-', $sort);
+
+                $valA = $this->getSortValue($a, $field);
+                $valB = $this->getSortValue($b, $field);
+
+                if ($direction === 'asc') {
+                    return $valA <=> $valB;
+                } else {
+                    return $valB <=> $valA;
+                }
+            });
+        }
+
+        return array_values($filteredItems);
+    }
+
+    private function getSortValue($item, string $field)
+    {
+        switch ($field) {
+            case 'size':
+                return $item->format ?? '';
+            case 'weight':
+                return $item->weight ?? 0;
+            case 'days':
+                return $item->days_in_transit ?? 0;
+            default:
+                return 0;
+        }
     }
 }
