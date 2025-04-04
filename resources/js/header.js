@@ -32,6 +32,7 @@ class Header {
     initFilters() {
         this.controlsToggle = document.getElementById('controlsToggle');
         this.expandedControls = document.getElementById('expandedControls');
+        this.packageSearch = document.getElementById('packageSearch');
 
         if (this.controlsToggle && this.expandedControls) {
             this.controlsToggle.addEventListener('click', () => {
@@ -42,12 +43,14 @@ class Header {
             });
         }
 
+        this.initializeFiltersFromURL();
+
         document.querySelectorAll('.toggle-btn').forEach(button => {
             button.addEventListener('click', (e) => {
-                const parent = e.currentTarget.parentElement;
+                const group = e.currentTarget.closest('.toggle-buttons');
 
-                if (e.currentTarget.dataset.filter === parent.querySelector('.toggle-btn').dataset.filter) {
-                    parent.querySelectorAll('.toggle-btn').forEach(btn => {
+                if (group) {
+                    group.querySelectorAll('.toggle-btn').forEach(btn => {
                         btn.classList.remove('active');
                         btn.setAttribute('aria-pressed', 'false');
                     });
@@ -56,12 +59,58 @@ class Header {
                 e.currentTarget.classList.toggle('active');
                 e.currentTarget.setAttribute('aria-pressed',
                     e.currentTarget.classList.contains('active'));
+
+                this.updateURLWithFilters();
             });
         });
+
+        const sortSelect = document.getElementById('sortSelect');
+        if (sortSelect) {
+            sortSelect.addEventListener('change', () => {
+                this.updateURLWithFilters();
+            });
+        }
+
+        if (this.packageSearch) {
+            const searchButton = document.querySelector('.search-button');
+            if (searchButton) {
+                searchButton.addEventListener('click', () => {
+                    this.updateURLWithFilters();
+                });
+            }
+
+            this.packageSearch.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.updateURLWithFilters();
+                }
+            });
+        }
+    }
+
+    initializeFiltersFromURL() {
+        const urlParams = new URLSearchParams(window.location.search);
+
+        document.querySelectorAll('.toggle-btn').forEach(button => {
+            const filterType = button.dataset.filter;
+            const filterValue = button.dataset.value;
+
+            if (urlParams.has(filterType) && urlParams.get(filterType).includes(filterValue)) {
+                button.classList.add('active');
+                button.setAttribute('aria-pressed', 'true');
+            }
+        });
+
+        const sortSelect = document.getElementById('sortSelect');
+        if (sortSelect && urlParams.has('sort')) {
+            sortSelect.value = urlParams.get('sort');
+        }
+
+        if (this.packageSearch && urlParams.has('search')) {
+            this.packageSearch.value = urlParams.get('search');
+        }
     }
 
     setupEventListeners() {
-        // Theme toggle event
         if (this.darkModeToggle) {
             this.darkModeToggle.addEventListener('change', () => {
                 const newTheme = this.darkModeToggle.checked ? 'dark' : 'light';
@@ -69,6 +118,30 @@ class Header {
                 localStorage.setItem('theme', newTheme);
             });
         }
+    }
+
+    updateURLWithFilters() {
+        const url = new URL(window.location.href);
+        const searchParams = new URLSearchParams();
+
+        url.search = '';
+
+        document.querySelectorAll('.toggle-btn.active').forEach(button => {
+            const filterType = button.dataset.filter;
+            const filterValue = button.dataset.value;
+            searchParams.set(filterType, filterValue);
+        });
+
+        const sortSelect = document.getElementById('sortSelect');
+        if (sortSelect && sortSelect.value) {
+            searchParams.set('sort', sortSelect.value);
+        }
+
+        if (this.packageSearch && this.packageSearch.value.trim() !== '') {
+            searchParams.set('search', this.packageSearch.value.trim());
+        }
+
+        window.location.href = `${url.pathname}?${searchParams.toString()}`;
     }
 }
 
