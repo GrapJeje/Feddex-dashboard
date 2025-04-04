@@ -104,63 +104,57 @@ class Delivery
         $item = new stdClass();
 
         $item->id = isset($delivery->id) ? (string)$delivery->id : '0';
-        $item->weight = isset($delivery->gewicht) ? max(0, (float)$delivery->gewicht) : 0.0;
-        $item->format = isset($delivery->formaat) ? (string)$delivery->formaat : 'Onbekend';
-        $item->dimensions = isset($delivery->afmetingen) ? (string)$delivery->afmetingen : '0x0x0';
-        $item->priority = 'low';
+        $item->gewicht = isset($delivery->gewicht) ? max(0, (float)$delivery->gewicht) : 0.0;
+        $item->formaat = isset($delivery->formaat) ? (string)$delivery->formaat : 'Onbekend';
+        $item->afmetingen = isset($delivery->afmetingen) ? (string)$delivery->afmetingen : '0x0x0';
 
-        $item->sender = $this->extractAddress($delivery->afzender ?? new SimpleXMLElement('<empty/>'));
-        $item->receiver = $this->extractAddress($delivery->ontvanger ?? new SimpleXMLElement('<empty/>'));
-
-        $item->tracking_code = '';
-        $item->tracking_status = 'unknown';
+        $item->afzender = $this->parseAddress($delivery->afzender ?? new SimpleXMLElement('<empty/>'));
+        $item->ontvanger = $this->parseAddress($delivery->ontvanger ?? new SimpleXMLElement('<empty/>'));
 
         $optionalFields = [
-            'binnenland' => ['domestic', false],
-            'bezorgdag' => ['delivery_day', ''],
-            'bezorgtijd' => ['delivery_time', ''],
-            'dagen_onderweg' => ['days_in_transit', 0],
-            'prioriteit' => ['priority', 'low'],
-            'fragile' => ['fragile', false],
-            'track_trace' => ['tracking_code', ''],
-            'track_trace_status' => ['tracking_status', 'unknown'],
-            'chauffeur' => ['driver', ''],
-            'bezorgbus_id' => ['delivery_van_id', 0],
-            'aanmeld_datum' => ['registration_date', ''],
-            'verzend_datum' => ['shipping_date', ''],
-            'ontvangst_datum' => ['receipt_date', ''],
-            'thuis' => ['home', ''],
-            'vermist_datum' => ['missing_date', ''],
-            'aantal_dagen_vermist' => ['days_missing', 0]
+            'binnenland' => 'bool',
+            'bezorgdag' => 'string',
+            'bezorgtijd' => 'string',
+            'dagen_onderweg' => 'int',
+            'prioriteit' => 'string',
+            'fragile' => 'bool',
+            'track_trace' => 'string',
+            'track_trace_status' => 'string',
+            'chauffeur' => 'string',
+            'bezorgbus_id' => 'int',
+            'aanmeld_datum' => 'string',
+            'verzend_datum' => 'string',
+            'ontvangst_datum' => 'string',
+            'thuis' => 'string',
+            'vermist_datum' => 'string',
+            'aantal_dagen_vermist' => 'int'
         ];
 
-        foreach ($optionalFields as $xmlField => [$objectField, $defaultValue]) {
-            $item->{$objectField} = $defaultValue;
-            if (isset($delivery->{$xmlField})) {
-                $value = (string)$delivery->{$xmlField};
-                if ($xmlField === 'binnenland' || $xmlField === 'fragile') {
-                    $value = strtolower($value) === 'true';
+        foreach ($optionalFields as $field => $type) {
+            if (isset($delivery->{$field})) {
+                $value = (string)$delivery->{$field};
+
+                if ($type === 'bool') {
+                    $item->{$field} = strtolower($value) === 'true';
                 }
-                $item->{$objectField} = $value;
+                else if ($type === 'int') {
+                    $item->{$field} = (int)$value;
+                }
+                else {
+                    $item->{$field} = $value;
+                }
+            } else {
+                if ($type === 'bool') {
+                    $item->{$field} = false;
+                } else if ($type === 'int') {
+                    $item->{$field} = 0;
+                } else {
+                    $item->{$field} = '';
+                }
             }
         }
 
-        $item->priority = strtolower($item->priority);
-
         return $item;
-    }
-
-    private function extractAddress(SimpleXMLElement $address): stdClass
-    {
-        $addr = new stdClass();
-        $addr->country = (string)($address->land ?? '');
-        $addr->province = (string)($address->provincie ?? '');
-        $addr->city = (string)($address->stad ?? '');
-        $addr->street = (string)($address->straat ?? '');
-        $addr->house_number = (string)($address->huisnummer ?? '');
-        $addr->postal_code = (string)($address->postcode ?? '');
-
-        return $addr;
     }
 
     private function loadJsonData(string $folderPath): void
@@ -220,7 +214,7 @@ class Delivery
                     $this->logError("Skipping invalid JSON item #$index from $sourceFile: " . $e->getMessage(), 'json');
                 }
             }
-        } elseif (is_object($data)) {
+        } else if (is_object($data)) {
             try {
                 $parsedItem = $this->parseItem($data);
                 $this->items[] = $parsedItem;
@@ -326,11 +320,11 @@ class Delivery
                         if ($value === 'international' && (!isset($item->domestic) || $item->domestic)) {
                             return false;
                         }
-                    } elseif ($key === 'delivery_day') {
+                    } else if ($key === 'delivery_day') {
                         if (!isset($item->delivery_day) || strtolower($item->delivery_day) !== strtolower($value)) {
                             return false;
                         }
-                    } elseif ($key === 'delivery_time') {
+                    } else if ($key === 'delivery_time') {
                         if (!isset($item->delivery_time) || strtolower($item->delivery_time) !== strtolower($value)) {
                             return false;
                         }
@@ -358,17 +352,13 @@ class Delivery
         return array_values($filteredItems);
     }
 
-    private function getSortValue($item, string $field)
+    private function getSortValue($item, string $field): int|string
     {
-        switch ($field) {
-            case 'size':
-                return $item->format ?? '';
-            case 'weight':
-                return $item->weight ?? 0;
-            case 'days':
-                return $item->days_in_transit ?? 0;
-            default:
-                return 0;
-        }
+        return match ($field) {
+            'size' => $item->format ?? '',
+            'weight' => $item->weight ?? 0,
+            'days' => $item->days_in_transit ?? 0,
+            default => 0,
+        };
     }
 }
