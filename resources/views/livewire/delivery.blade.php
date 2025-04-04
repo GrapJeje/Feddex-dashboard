@@ -83,15 +83,19 @@
 
     @if($showMore || $showLess)
         <div class="load-more-container">
-            @if($showMore)
-                <button class="load-btn more" onclick="loadPackages(5)">Meer laden (+5)</button>
-            @endif
-            @if($showLess)
-                <button class="load-btn less" onclick="loadPackages(-5)">Minder laden (-5)</button>
-            @endif
-            <p>@php
-                echo $currentAmount . "/" . count($items)
-                @endphp</p>
+            <div>
+                @if($showMore)
+                    <button class="load-btn more" onclick="loadPackages(5)">Meer laden (+5)</button>
+                @endif
+                @if($showLess)
+                    <button class="load-btn less" onclick="loadPackages(-5)">Minder laden (-5)</button>
+                @endif
+            </div>
+            <p class="load-counter">
+                @php
+                    echo $currentAmount . "/" . count($items)
+                @endphp
+            </p>
         </div>
     @endif
 

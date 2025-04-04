@@ -130,11 +130,14 @@
 }
 
 .load-more-container {
-    text-align: center;
-    margin: 20px 0;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
     gap: 10px;
+}
+
+.load-counter {
+    margin-bottom: 10px;
 }
 
 .load-btn {
