@@ -23,25 +23,27 @@ class Delivery
         return $this->items;
     }
 
+    public function getFilteredAndSortedItems(array $filters = [], string $sort = ''): array
+    {
+        $filteredItems = $this->applyFilters($this->items, $filters);
+        return $this->applySorting($filteredItems, $sort);
+    }
+
     private function loadData(string $folderPath): void
     {
-        if (!is_dir($folderPath)) {
-            throw new RuntimeException("Data directory not found: $folderPath");
-        }
-
+        if (!is_dir($folderPath)) throw new RuntimeException("Data directory not found: $folderPath");
         $this->loadXmlData($folderPath);
         $this->loadJsonData($folderPath);
 
-        error_log("[Delivery] Total items loaded: " . count($this->items));
+        error_log(sprintf(
+            '[Delivery] Total items loaded: %d',
+            count($this->items)
+        ));
     }
 
     private function loadXmlData(string $folderPath): void
     {
-        $this->loadStats['xml'] = [
-            'files_processed' => 0,
-            'items_loaded' => 0,
-            'errors' => []
-        ];
+        $this->initializeLoadStats('xml');
 
         $xmlFiles = glob($folderPath . '/*.xml');
         if (empty($xmlFiles)) {
@@ -54,16 +56,62 @@ class Delivery
 
             try {
                 $xml = $this->loadXmlFile($xmlFile);
-                $itemsBefore = count($this->items);
-                $this->processXmlDeliveries($xml, $xmlFile);
-                $itemsAdded = count($this->items) - $itemsBefore;
+                $itemsAdded = $this->processXmlDeliveries($xml, $xmlFile);
                 $this->loadStats['xml']['items_loaded'] += $itemsAdded;
 
-                error_log("[XML] Processed $xmlFile, added $itemsAdded items");
+                error_log(sprintf(
+                    '[XML] Processed %s, added %d items',
+                    $xmlFile,
+                    $itemsAdded
+                ));
             } catch (RuntimeException $e) {
-                $this->logError("Failed to process XML file $xmlFile: " . $e->getMessage(), 'xml');
+                $this->logError(
+                    sprintf('Failed to process XML file %s: %s', $xmlFile, $e->getMessage()),
+                    'xml'
+                );
             }
         }
+    }
+
+    private function loadJsonData(string $folderPath): void
+    {
+        $this->initializeLoadStats('json');
+
+        $jsonFiles = glob($folderPath . '/*.json');
+        if (empty($jsonFiles)) {
+            $this->logError("No JSON files found in: $folderPath", 'json');
+            return;
+        }
+
+        foreach ($jsonFiles as $jsonFile) {
+            $this->loadStats['json']['files_processed']++;
+
+            try {
+                $data = $this->loadJsonFile($jsonFile);
+                $itemsAdded = $this->processJsonItems($data, $jsonFile);
+                $this->loadStats['json']['items_loaded'] += $itemsAdded;
+
+                error_log(sprintf(
+                    '[JSON] Processed %s, added %d items',
+                    $jsonFile,
+                    $itemsAdded
+                ));
+            } catch (RuntimeException $e) {
+                $this->logError(
+                    sprintf('Failed to process JSON file %s: %s', $jsonFile, $e->getMessage()),
+                    'json'
+                );
+            }
+        }
+    }
+
+    private function initializeLoadStats(string $type): void
+    {
+        $this->loadStats[$type] = [
+            'files_processed' => 0,
+            'items_loaded' => 0,
+            'errors' => []
+        ];
     }
 
     private function loadXmlFile(string $filePath): SimpleXMLElement
@@ -74,42 +122,49 @@ class Delivery
         if ($xml === false) {
             $errors = array_map(fn($e) => $e->message, libxml_get_errors());
             libxml_clear_errors();
-            throw new RuntimeException(
-                "XML parse error in $filePath: " . json_encode($errors)
-            );
+            throw new RuntimeException(sprintf(
+                'XML parse error in %s: %s',
+                $filePath,
+                json_encode($errors)
+            ));
         }
 
         return $xml;
     }
 
-    private function processXmlDeliveries(SimpleXMLElement $xml, string $sourceFile = ''): void
+    private function processXmlDeliveries(SimpleXMLElement $xml, string $sourceFile = ''): int
     {
-        if (!isset($xml->bezorging)) {
-            throw new RuntimeException("No <bezorging> elements found in XML");
-        }
+        if (!isset($xml->bezorging)) throw new RuntimeException("No <bezorging> elements found in XML");
+        $itemsBefore = count($this->items);
 
         foreach ($xml->bezorging as $index => $delivery) {
             try {
                 $itemData = $this->convertXmlDeliveryToObject($delivery);
-                $parsedItem = $this->parseItem($itemData);
-                $this->items[] = $parsedItem;
+                $this->items[] = $this->parseItem($itemData);
             } catch (InvalidArgumentException $e) {
-                $this->logError("Skipping invalid XML delivery #$index from $sourceFile: " . $e->getMessage(), 'xml');
+                $this->logError(sprintf(
+                    'Skipping invalid XML delivery #%d from %s: %s',
+                    $index,
+                    $sourceFile,
+                    $e->getMessage()
+                ), 'xml');
             }
         }
+
+        return count($this->items) - $itemsBefore;
     }
 
     private function convertXmlDeliveryToObject(SimpleXMLElement $delivery): stdClass
     {
         $item = new stdClass();
 
-        $item->id = isset($delivery->id) ? (string)$delivery->id : '0';
-        $item->gewicht = isset($delivery->gewicht) ? max(0, (float)$delivery->gewicht) : 0.0;
-        $item->formaat = isset($delivery->formaat) ? (string)$delivery->formaat : 'Onbekend';
-        $item->afmetingen = isset($delivery->afmetingen) ? (string)$delivery->afmetingen : '0x0x0';
+        $item->id = (string)($delivery->id ?? '0');
+        $item->gewicht = max(0, (float)($delivery->gewicht ?? 0.0));
+        $item->formaat = (string)($delivery->formaat ?? 'Onbekend');
+        $item->afmetingen = (string)($delivery->afmetingen ?? '0x0x0');
 
-        $item->afzender = isset($delivery->afzender) ? $delivery->afzender : null;
-        $item->ontvanger = isset($delivery->ontvanger) ? $delivery->ontvanger : null;
+        $item->afzender = $delivery->afzender ?? null;
+        $item->ontvanger = $delivery->ontvanger ?? null;
 
         $optionalFields = [
             'binnenland' => 'bool',
@@ -131,108 +186,69 @@ class Delivery
         ];
 
         foreach ($optionalFields as $field => $type) {
-            if (isset($delivery->{$field})) {
-                $value = (string)$delivery->{$field};
-
-                if ($type === 'bool') {
-                    $item->{$field} = strtolower($value) === 'true';
-                }
-                else if ($type === 'int') {
-                    $item->{$field} = (int)$value;
-                }
-                else {
-                    $item->{$field} = $value;
-                }
-            } else {
-                if ($type === 'bool') {
-                    $item->{$field} = false;
-                } else if ($type === 'int') {
-                    $item->{$field} = 0;
-                } else {
-                    $item->{$field} = '';
-                }
-            }
+            $item->{$field} = $this->convertFieldValue($delivery->{$field} ?? null, $type);
         }
 
         return $item;
     }
 
-    private function createEmptyAddress(): stdClass
+    private function convertFieldValue($value, string $type): float|bool|int|string
     {
-        $empty = new stdClass();
-        $empty->country = '';
-        $empty->province = '';
-        $empty->city = '';
-        $empty->street = '';
-        $empty->house_number = '';
-        $empty->postal_code = '';
-        return $empty;
+        if ($value === null) return $this->getDefaultValueForType($type);
+        $value = (string)$value;
+
+        return match ($type) {
+            'bool' => strtolower($value) === 'true',
+            'int' => (int)$value,
+            'float' => (float)$value,
+            default => $value,
+        };
     }
 
-    private function loadJsonData(string $folderPath): void
+    private function getDefaultValueForType(string $type): false|int|string
     {
-        $this->loadStats['json'] = [
-            'files_processed' => 0,
-            'items_loaded' => 0,
-            'errors' => []
-        ];
-
-        $jsonFiles = glob($folderPath . '/*.json');
-        if (empty($jsonFiles)) {
-            $this->logError("No JSON files found in: $folderPath", 'json');
-            return;
-        }
-
-        foreach ($jsonFiles as $jsonFile) {
-            $this->loadStats['json']['files_processed']++;
-
-            try {
-                $data = $this->loadJsonFile($jsonFile);
-                $itemsBefore = count($this->items);
-                $this->processJsonItems($data, $jsonFile);
-                $itemsAdded = count($this->items) - $itemsBefore;
-                $this->loadStats['json']['items_loaded'] += $itemsAdded;
-
-                error_log("[JSON] Processed $jsonFile, added $itemsAdded items");
-            } catch (RuntimeException $e) {
-                $this->logError("Failed to process JSON file $jsonFile: " . $e->getMessage(), 'json');
-            }
-        }
+        return match ($type) {
+            'bool' => false,
+            'int', 'float' => 0,
+            default => '',
+        };
     }
 
     private function loadJsonFile(string $filePath)
     {
         $content = file_get_contents($filePath);
-        if ($content === false) {
-            throw new RuntimeException("Failed to read file");
-        }
+        if ($content === false) throw new RuntimeException("Failed to read file");
 
         $data = json_decode($content);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new RuntimeException("JSON decode error: " . json_last_error_msg());
-        }
+        if (json_last_error() !== JSON_ERROR_NONE) throw new RuntimeException("JSON decode error: " . json_last_error_msg());
 
         return $data;
     }
 
-    private function processJsonItems($data, string $sourceFile = ''): void
+    private function processJsonItems($data, string $sourceFile = ''): int
     {
+        $itemsBefore = count($this->items);
+
         if (is_array($data)) {
             foreach ($data as $index => $item) {
-                try {
-                    $parsedItem = $this->parseItem($item);
-                    $this->items[] = $parsedItem;
-                } catch (InvalidArgumentException $e) {
-                    $this->logError("Skipping invalid JSON item #$index from $sourceFile: " . $e->getMessage(), 'json');
-                }
+                $this->processSingleJsonItem($item, $index, $sourceFile);
             }
-        } else if (is_object($data)) {
-            try {
-                $parsedItem = $this->parseItem($data);
-                $this->items[] = $parsedItem;
-            } catch (InvalidArgumentException $e) {
-                $this->logError("Skipping invalid JSON object from $sourceFile: " . $e->getMessage(), 'json');
-            }
+        } else if (is_object($data)) $this->processSingleJsonItem($data, 0, $sourceFile);
+
+        return count($this->items) - $itemsBefore;
+    }
+
+    private function processSingleJsonItem($item, int $index, string $sourceFile): void
+    {
+        try {
+            $this->items[] = $this->parseItem($item);
+        } catch (InvalidArgumentException $e) {
+            $this->logError(sprintf(
+                'Skipping invalid JSON item #%d from %s: %s',
+                $index,
+                $sourceFile,
+                $e->getMessage()
+            ), 'json');
         }
     }
 
@@ -249,22 +265,14 @@ class Delivery
         ];
 
         foreach ($requiredFields as $field => $config) {
-            $value = $item->{$field} ?? $config['default'];
-            settype($value, $config['type']);
-            $parsed->{$config['property']} = $value;
+            $parsed->{$config['property']} = $this->convertFieldValue(
+                $item->{$field} ?? $config['default'],
+                $config['type']
+            );
         }
 
-        if (isset($item->afzender)) {
-            $parsed->sender = ($item->afzender instanceof SimpleXMLElement)
-                ? $this->parseAddress($item->afzender)
-                : (is_object($item->afzender) ? $this->parseJsonAddress($item->afzender) : $this->createEmptyAddress());
-        }
-
-        if (isset($item->ontvanger)) {
-            $parsed->receiver = ($item->ontvanger instanceof SimpleXMLElement)
-                ? $this->parseAddress($item->ontvanger)
-                : (is_object($item->ontvanger) ? $this->parseJsonAddress($item->ontvanger) : $this->createEmptyAddress());
-        }
+        $parsed->sender = $this->parseAddressField($item->afzender ?? null);
+        $parsed->receiver = $this->parseAddressField($item->ontvanger ?? null);
 
         $optionalFields = [
             'binnenland' => ['property' => 'domestic', 'default' => false, 'type' => 'bool'],
@@ -286,38 +294,39 @@ class Delivery
         ];
 
         foreach ($optionalFields as $field => $config) {
-            $value = $item->{$field} ?? $config['default'];
-            settype($value, $config['type']);
-            $parsed->{$config['property']} = $value;
+            $parsed->{$config['property']} = $this->convertFieldValue(
+                $item->{$field} ?? $config['default'],
+                $config['type']
+            );
         }
 
         return $parsed;
     }
 
-    private function parseAddress($address): stdClass
+    private function parseAddressField($address): stdClass
+    {
+        if ($address instanceof SimpleXMLElement) return $this->parseXmlAddress($address);
+        if (is_object($address)) return $this->parseJsonAddress($address);
+
+        return $this->createEmptyAddress();
+    }
+
+    private function parseXmlAddress(SimpleXMLElement $address): stdClass
     {
         $parsed = new stdClass();
 
-        if (!$address) {
-            return $this->createEmptyAddress();
-        }
-
-        $parsed->country = isset($address->land) ? (string)$address->land : '';
-        $parsed->province = isset($address->provincie) ? (string)$address->provincie : '';
-        $parsed->city = isset($address->stad) ? (string)$address->stad : '';
-        $parsed->street = isset($address->straat) ? (string)$address->straat : '';
-        $parsed->house_number = isset($address->huisnummer) ? (string)$address->huisnummer : '';
-        $parsed->postal_code = isset($address->postcode) ? (string)$address->postcode : '';
+        $parsed->country = (string)($address->land ?? '');
+        $parsed->province = (string)($address->provincie ?? '');
+        $parsed->city = (string)($address->stad ?? '');
+        $parsed->street = (string)($address->straat ?? '');
+        $parsed->house_number = (string)($address->huisnummer ?? '');
+        $parsed->postal_code = (string)($address->postcode ?? '');
 
         return $parsed;
     }
 
-    private function parseJsonAddress($address): stdClass
+    private function parseJsonAddress(stdClass $address): stdClass
     {
-        if (!$address || !is_object($address)) {
-            return $this->createEmptyAddress();
-        }
-
         $parsed = new stdClass();
 
         $parsed->country = $address->land ?? '';
@@ -328,6 +337,18 @@ class Delivery
         $parsed->postal_code = $address->postcode ?? '';
 
         return $parsed;
+    }
+
+    private function createEmptyAddress(): stdClass
+    {
+        return (object)[
+            'country' => '',
+            'province' => '',
+            'city' => '',
+            'street' => '',
+            'house_number' => '',
+            'postal_code' => ''
+        ];
     }
 
     private function generateUuid(): string
@@ -350,53 +371,63 @@ class Delivery
         error_log("[Delivery Error] $message");
     }
 
-    public function getFilteredAndSortedItems(array $filters = [], string $sort = ''): array
+    private function applyFilters(array $items, array $filters): array
     {
-        $filteredItems = $this->items;
+        if (empty($filters)) return $items;
 
-        if (!empty($filters)) {
-            $filteredItems = array_filter($filteredItems, function ($item) use ($filters) {
-                foreach ($filters as $key => $value) {
-                    if ($key === 'destination') {
-                        if ($value === 'domestic' && (!isset($item->domestic) || !$item->domestic)) {
-                            return false;
-                        }
-                        if ($value === 'international' && (!isset($item->domestic) || $item->domestic)) {
-                            return false;
-                        }
-                    } else if ($key === 'delivery_day') {
-                        if (!isset($item->delivery_day) || strtolower($item->delivery_day) !== strtolower($value)) {
-                            return false;
-                        }
-                    } else if ($key === 'delivery_time') {
-                        if (!isset($item->delivery_time) || strtolower($item->delivery_time) !== strtolower($value)) {
-                            return false;
-                        }
-                    }
+        return array_filter($items, function ($item) use ($filters) {
+            foreach ($filters as $key => $value) {
+                if (!$this->itemMatchesFilter($item, $key, $value)) {
+                    return false;
                 }
-                return true;
-            });
-        }
-
-        if (!empty($sort)) {
-            usort($filteredItems, function ($a, $b) use ($sort) {
-                [$field, $direction] = explode('-', $sort);
-
-                $valA = $this->getSortValue($a, $field);
-                $valB = $this->getSortValue($b, $field);
-
-                if ($direction === 'asc') {
-                    return $valA <=> $valB;
-                } else {
-                    return $valB <=> $valA;
-                }
-            });
-        }
-
-        return array_values($filteredItems);
+            }
+            return true;
+        });
     }
 
-    private function getSortValue($item, string $field): int|string
+    private function itemMatchesFilter(object $item, string $key, $value): bool
+    {
+        switch ($key) {
+            case 'destination':
+                if ($value === 'domestic') {
+                    return ($item->domestic ?? false);
+                }
+                if ($value === 'international') {
+                    return !($item->domestic ?? true);
+                }
+                break;
+
+            case 'delivery_day':
+                return isset($item->delivery_day) &&
+                    strtolower($item->delivery_day) === strtolower($value);
+
+            case 'delivery_time':
+                return isset($item->delivery_time) &&
+                    strtolower($item->delivery_time) === strtolower($value);
+        }
+
+        return true;
+    }
+
+    private function applySorting(array $items, string $sort): array
+    {
+        if (empty($sort)) {
+            return array_values($items);
+        }
+
+        [$field, $direction] = explode('-', $sort);
+
+        usort($items, function ($a, $b) use ($field, $direction) {
+            $valA = $this->getSortValue($a, $field);
+            $valB = $this->getSortValue($b, $field);
+
+            return $direction === 'asc' ? $valA <=> $valB : $valB <=> $valA;
+        });
+
+        return array_values($items);
+    }
+
+    private function getSortValue(object $item, string $field): int|string
     {
         return match ($field) {
             'size' => $item->format ?? '',
