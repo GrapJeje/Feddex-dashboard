@@ -108,8 +108,8 @@ class Delivery
         $item->formaat = isset($delivery->formaat) ? (string)$delivery->formaat : 'Onbekend';
         $item->afmetingen = isset($delivery->afmetingen) ? (string)$delivery->afmetingen : '0x0x0';
 
-        $item->afzender = $this->parseAddress($delivery->afzender ?? new SimpleXMLElement('<empty/>'));
-        $item->ontvanger = $this->parseAddress($delivery->ontvanger ?? new SimpleXMLElement('<empty/>'));
+        $item->afzender = isset($delivery->afzender) ? $delivery->afzender : null;
+        $item->ontvanger = isset($delivery->ontvanger) ? $delivery->ontvanger : null;
 
         $optionalFields = [
             'binnenland' => 'bool',
@@ -155,6 +155,18 @@ class Delivery
         }
 
         return $item;
+    }
+
+    private function createEmptyAddress(): stdClass
+    {
+        $empty = new stdClass();
+        $empty->country = '';
+        $empty->province = '';
+        $empty->city = '';
+        $empty->street = '';
+        $empty->house_number = '';
+        $empty->postal_code = '';
+        return $empty;
     }
 
     private function loadJsonData(string $folderPath): void
@@ -242,8 +254,17 @@ class Delivery
             $parsed->{$config['property']} = $value;
         }
 
-        $parsed->sender = $this->parseAddress($item->afzender ?? null);
-        $parsed->receiver = $this->parseAddress($item->ontvanger ?? null);
+        if (isset($item->afzender)) {
+            $parsed->sender = ($item->afzender instanceof SimpleXMLElement)
+                ? $this->parseAddress($item->afzender)
+                : (is_object($item->afzender) ? $this->parseJsonAddress($item->afzender) : $this->createEmptyAddress());
+        }
+
+        if (isset($item->ontvanger)) {
+            $parsed->receiver = ($item->ontvanger instanceof SimpleXMLElement)
+                ? $this->parseAddress($item->ontvanger)
+                : (is_object($item->ontvanger) ? $this->parseJsonAddress($item->ontvanger) : $this->createEmptyAddress());
+        }
 
         $optionalFields = [
             'binnenland' => ['property' => 'domestic', 'default' => false, 'type' => 'bool'],
@@ -273,15 +294,38 @@ class Delivery
         return $parsed;
     }
 
-    private function parseAddress(?object $address): stdClass
+    private function parseAddress($address): stdClass
     {
         $parsed = new stdClass();
-        $parsed->country = (string)($address->land ?? '');
-        $parsed->province = (string)($address->provincie ?? '');
-        $parsed->city = (string)($address->stad ?? '');
-        $parsed->street = (string)($address->straat ?? '');
-        $parsed->house_number = (string)($address->huisnummer ?? '');
-        $parsed->postal_code = (string)($address->postcode ?? '');
+
+        if (!$address) {
+            return $this->createEmptyAddress();
+        }
+
+        $parsed->country = isset($address->land) ? (string)$address->land : '';
+        $parsed->province = isset($address->provincie) ? (string)$address->provincie : '';
+        $parsed->city = isset($address->stad) ? (string)$address->stad : '';
+        $parsed->street = isset($address->straat) ? (string)$address->straat : '';
+        $parsed->house_number = isset($address->huisnummer) ? (string)$address->huisnummer : '';
+        $parsed->postal_code = isset($address->postcode) ? (string)$address->postcode : '';
+
+        return $parsed;
+    }
+
+    private function parseJsonAddress($address): stdClass
+    {
+        if (!$address || !is_object($address)) {
+            return $this->createEmptyAddress();
+        }
+
+        $parsed = new stdClass();
+
+        $parsed->country = $address->land ?? '';
+        $parsed->province = $address->provincie ?? '';
+        $parsed->city = $address->stad ?? '';
+        $parsed->street = $address->straat ?? '';
+        $parsed->house_number = $address->huisnummer ?? '';
+        $parsed->postal_code = $address->postcode ?? '';
 
         return $parsed;
     }

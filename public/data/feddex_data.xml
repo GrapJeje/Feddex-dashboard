@@ -569,7 +569,7 @@
         <vermist_datum/>
         <aantal_dagen_vermist/>
     </bezorging>
-    <bezorging>c
+    <bezorging>
         <id>1</id>
         <gewicht>2.39</gewicht>
         <formaat>Klein pakket</formaat>
