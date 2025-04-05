@@ -28,7 +28,11 @@
                             <span class="value status-{{ strtolower(str_replace(' ', '-', $item->tracking_status)) }}">
                                 {{ $item->tracking_status }}
                                 @if($item->days_in_transit > 0)
-                                    ({{ $item->days_in_transit }} dagen onderweg)
+                                    @if($item->days_in_transit == 1)
+                                        1 dag onderweg)
+                                    @else
+                                    {{ $item->days_in_transit }} dagen onderweg
+                                    @endif
                                 @endif
                             </span>
                         </div>

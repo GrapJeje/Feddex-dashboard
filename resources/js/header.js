@@ -47,18 +47,19 @@ class Header {
 
         document.querySelectorAll('.toggle-btn').forEach(button => {
             button.addEventListener('click', (e) => {
+                const filterType = e.currentTarget.dataset.filter;
                 const group = e.currentTarget.closest('.toggle-buttons');
 
+                // Alleen buttons met hetzelfde data-filter deactiveren binnen de groep
                 if (group) {
-                    group.querySelectorAll('.toggle-btn').forEach(btn => {
+                    group.querySelectorAll(`.toggle-btn[data-filter="${filterType}"]`).forEach(btn => {
                         btn.classList.remove('active');
                         btn.setAttribute('aria-pressed', 'false');
                     });
                 }
 
-                e.currentTarget.classList.toggle('active');
-                e.currentTarget.setAttribute('aria-pressed',
-                    e.currentTarget.classList.contains('active'));
+                e.currentTarget.classList.add('active');
+                e.currentTarget.setAttribute('aria-pressed', 'true');
 
                 this.updateURLWithFilters();
             });
@@ -94,7 +95,7 @@ class Header {
             const filterType = button.dataset.filter;
             const filterValue = button.dataset.value;
 
-            if (urlParams.has(filterType) && urlParams.get(filterType).includes(filterValue)) {
+            if (urlParams.getAll(filterType).includes(filterValue)) {
                 button.classList.add('active');
                 button.setAttribute('aria-pressed', 'true');
             }
@@ -124,19 +125,26 @@ class Header {
         const url = new URL(window.location.href);
         const searchParams = new URLSearchParams();
 
-        url.search = '';
+        // Behoud de bestaande amount parameter als die bestaat
+        const currentParams = new URLSearchParams(window.location.search);
+        if (currentParams.has('amount')) {
+            searchParams.set('amount', currentParams.get('amount'));
+        }
 
+        // Add toggle button filters
         document.querySelectorAll('.toggle-btn.active').forEach(button => {
             const filterType = button.dataset.filter;
             const filterValue = button.dataset.value;
-            searchParams.set(filterType, filterValue);
+            searchParams.append(filterType, filterValue);
         });
 
+        // Add sort
         const sortSelect = document.getElementById('sortSelect');
         if (sortSelect && sortSelect.value) {
             searchParams.set('sort', sortSelect.value);
         }
 
+        // Add search
         if (this.packageSearch && this.packageSearch.value.trim() !== '') {
             searchParams.set('search', this.packageSearch.value.trim());
         }

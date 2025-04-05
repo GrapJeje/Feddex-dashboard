@@ -37,7 +37,7 @@
                     <div class="filter-group">
                         <label>Bestemming</label>
                         <div class="toggle-buttons">
-                            <button class="toggle-btn active" data-filter="destination" data-value="domestic">
+                            <button class="toggle-btn" data-filter="destination" data-value="domestic">
                                 Binnenland
                             </button>
                             <button class="toggle-btn" data-filter="destination" data-value="international">Buitenland
@@ -49,7 +49,7 @@
                         <label>Bezorgmoment</label>
                         <div class="toggle-buttons">
                             <button class="toggle-btn" data-filter="delivery_day" data-value="weekend">Weekend</button>
-                            <button class="toggle-btn" data-filter="delivery_day" data-value="weekday">Door de week
+                            <button class="toggle-btn" data-filter="delivery_day" data-value="weekdag">Door de week
                             </button>
                             <button class="toggle-btn" data-filter="delivery_time" data-value="day">Overdag</button>
                             <button class="toggle-btn" data-filter="delivery_time" data-value="evening">'s Avonds

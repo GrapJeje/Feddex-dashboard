@@ -23,9 +23,14 @@ class Delivery
         return $this->items;
     }
 
-    public function getFilteredAndSortedItems(array $filters = [], string $sort = ''): array
+    public function getFilteredAndSortedItems(array $filters = [], string $sort = '', string $search = ''): array
     {
-        $filteredItems = $this->applyFilters($this->items, $filters);
+        if (empty($filters)) $filters = $this->getFiltersFromURL();
+        if (empty($sort) && isset($_GET['sort'])) $sort = $_GET['sort'];
+        if (empty($search) && isset($_GET['search'])) $search = $_GET['search'];
+
+        $normalizedItems = $this->normalizeItems($this->getItems());
+        $filteredItems = $this->applyFilters($normalizedItems, $filters, $search);
         return $this->applySorting($filteredItems, $sort);
     }
 
@@ -371,39 +376,118 @@ class Delivery
         error_log("[Delivery Error] $message");
     }
 
-    private function applyFilters(array $items, array $filters): array
+    private function getFiltersFromURL(): array
     {
-        if (empty($filters)) return $items;
+        $filters = [];
+        $possibleFilters = ['destination', 'delivery_time', 'delivery_day', 'priority', 'fragile'];
 
-        return array_filter($items, function ($item) use ($filters) {
-            foreach ($filters as $key => $value) {
-                if (!$this->itemMatchesFilter($item, $key, $value)) {
-                    return false;
-                }
+        foreach ($possibleFilters as $filter) {
+            if (isset($_GET[$filter]) && $_GET[$filter] !== '') {
+                $filters[$filter] = $_GET[$filter];
+                error_log("Filter found: $filter = " . $_GET[$filter]);
             }
-            return true;
-        });
+        }
+
+        error_log('Total filters found: ' . count($filters));
+        return $filters;
     }
 
-    private function itemMatchesFilter(object $item, string $key, $value): bool
+    private function normalizeItems(array $items): array
     {
+        return array_map(function ($item) {
+            if (is_array($item)) {
+                $obj = new stdClass();
+                foreach ($item as $key => $value) {
+                    $obj->{$key} = $value;
+                }
+                return $obj;
+            }
+            return $item;
+        }, $items);
+    }
+
+    private function applyFilters(array $items, array $filters, string $search = ''): array
+    {
+        $filteredItems = $items;
+
+        if (!empty($filters)) {
+            $filteredItems = array_filter($filteredItems, function ($item) use ($filters) {
+                foreach ($filters as $key => $value) {
+                    if (!$this->itemMatchesFilter($item, $key, $value)) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
+
+        if (!empty($search)) {
+            $searchTerm = strtolower(trim($search));
+            $filteredItems = array_filter($filteredItems, function ($item) use ($searchTerm) {
+                $searchFields = [
+                    strtolower($item->format ?? ''),
+                    strtolower($item->dimensions ?? ''),
+                    strtolower($item->tracking_code ?? ''),
+                    strtolower($item->tracking_status ?? ''),
+                    strtolower($item->driver ?? '')
+                ];
+
+                foreach ($searchFields as $field) {
+                    if (str_contains($field, $searchTerm)) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
+
+        return array_values($filteredItems);
+    }
+
+    private function itemMatchesFilter($item, string $key, $value): bool
+    {
+        if ($value === '' || $value === null) {
+            return true;
+        }
+
         switch ($key) {
             case 'destination':
+                $isDomestic = $item->domestic ?? false;
                 if ($value === 'domestic') {
-                    return ($item->domestic ?? false);
+                    return $isDomestic === true;
                 }
                 if ($value === 'international') {
-                    return !($item->domestic ?? true);
+                    return $isDomestic === false;
                 }
                 break;
 
             case 'delivery_day':
-                return isset($item->delivery_day) &&
-                    strtolower($item->delivery_day) === strtolower($value);
+                $itemDay = strtolower($item->delivery_day ?? '');
+                $filterDay = strtolower($value);
+                return $itemDay === $filterDay;
 
             case 'delivery_time':
-                return isset($item->delivery_time) &&
-                    strtolower($item->delivery_time) === strtolower($value);
+                $itemTime = strtolower($item->delivery_time ?? '');
+                $filterTime = strtolower($value);
+                if ($filterTime === 'day') {
+                    return $itemTime === 'overdag';
+                }
+                if ($filterTime === 'evening') {
+                    return $itemTime === 'avond';
+                }
+                break;
+
+            case 'priority':
+                $itemPriority = strtolower($item->priority ?? '');
+                $filterPriority = strtolower($value);
+                return $itemPriority === $filterPriority;
+
+            case 'fragile':
+                $filterFragile = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+                return ($item->fragile ?? false) === $filterFragile;
+
+            default:
+                return true;
         }
 
         return true;
@@ -415,25 +499,64 @@ class Delivery
             return array_values($items);
         }
 
-        [$field, $direction] = explode('-', $sort);
+        $sortParts = explode('-', $sort);
+        $field = $sortParts[0];
+        $direction = $sortParts[1] ?? 'asc';
 
         usort($items, function ($a, $b) use ($field, $direction) {
             $valA = $this->getSortValue($a, $field);
             $valB = $this->getSortValue($b, $field);
 
-            return $direction === 'asc' ? $valA <=> $valB : $valB <=> $valA;
+            $result = $valA <=> $valB;
+            return $direction === 'asc' ? $result : -$result;
         });
 
         return array_values($items);
     }
 
-    private function getSortValue(object $item, string $field): int|string
+    private function getSortValue($item, string $field): float|false|int|string
     {
-        return match ($field) {
-            'size' => $item->format ?? '',
-            'weight' => $item->weight ?? 0,
-            'days' => $item->days_in_transit ?? 0,
-            default => 0,
-        };
+        switch ($field) {
+            case 'size':
+                if (isset($item->dimensions)) {
+                    $dims = explode('x', $item->dimensions);
+                    return array_sum(array_map('intval', $dims));
+                }
+                return 0;
+
+            case 'weight':
+                return $item->weight ?? 0;
+
+            case 'days':
+                return $item->days_in_transit ?? 0;
+
+            case 'priority':
+                $priorityOrder = [
+                    'high' => 3,
+                    'medium' => 2,
+                    'low' => 1,
+                    '' => 0
+                ];
+                $priority = strtolower($item->priority ?? '');
+                return $priorityOrder[$priority] ?? 0;
+
+            case 'date':
+                if (isset($item->shipping_date)) {
+                    return strtotime($item->shipping_date);
+                }
+                return 0;
+
+            default:
+                return $item->{$field} ?? '';
+        }
+    }
+
+    public function applyAmountFilter(array $items): array
+    {
+        if (isset($_GET['amount']) && is_numeric($_GET['amount'])) {
+            return array_slice($items, 0, (int)$_GET['amount']);
+        }
+
+        return $items;
     }
 }
